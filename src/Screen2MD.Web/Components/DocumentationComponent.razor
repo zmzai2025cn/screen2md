@@ -1,0 +1,67 @@
+@using Screen2MD.Web.Services
+@inject DocumentationService DocService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<div class="docs-page">
+    <header class="page-header">
+        <h1>📚 文档中心</h1>
+    </header>
+
+    <div class="docs-layout">
+        <!-- 侧边栏导航 -->
+        <aside class="docs-sidebar">
+            <nav class="doc-nav">
+                @foreach (var doc in documentList)
+                {
+                    <button 
+                        class="doc-nav-item @(currentDocId == doc.Id ? "active" : "")"
+                        @onclick="() => LoadDocument(doc.Id)">
+                        <span class="doc-icon">@doc.Icon</span>
+                        <span>@doc.Title</span>
+                    </button>
+                }
+            </nav>
+        </aside>
+
+        <!-- 文档内容 -->
+        <article class="doc-content">
+            @if (!string.IsNullOrEmpty(renderedContent))
+            {
+                <div class="markdown-body">
+                    @((MarkupString)renderedContent)
+                </div>
+            }
+            else
+            {
+                <div class="loading">加载中...</div>
+            }
+        </article>
+    </div>
+</div>
+
+@code {
+    private List<DocItem> documentList = new();
+    private string currentDocId = "index";
+    private string? renderedContent;
+
+    protected override void OnInitialized()
+    {
+        documentList = DocService.GetDocumentList();
+        LoadDocument("index");
+    }
+
+    private void LoadDocument(string docId)
+    {
+        currentDocId = docId;
+        var markdown = DocService.GetDocument(docId);
+        if (markdown != null)
+        {
+            renderedContent = DocService.RenderMarkdown(markdown);
+        }
+        else
+        {
+            renderedContent = "<p>文档未找到</p>";
+        }
+    }
+}

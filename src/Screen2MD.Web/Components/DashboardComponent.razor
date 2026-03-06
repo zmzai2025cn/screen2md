@@ -1,0 +1,188 @@
+@using Screen2MD.Services.Interfaces
+@inject IStorageService StorageService
+
+<div class="dashboard">
+    <header class="page-header">
+        <h1>仪表板</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" @onclick="RefreshData">
+                <span>🔄 刷新</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">📸</div>
+            <div class="stat-content">
+                <div class="stat-value">@todayCaptures</div>
+                <div class="stat-label">今日捕获</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">📁</div>
+            <div class="stat-content">
+                <div class="stat-value">@totalCaptures</div>
+                <div class="stat-label">总记录数</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">💾</div>
+            <div class="stat-content">
+                <div class="stat-value">@FormatBytes(totalStorageSize)</div>
+                <div class="stat-label">存储占用</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">☁️</div>
+            <div class="stat-content">
+                <div class="stat-value">@uploadedCount</div>
+                <div class="stat-label">已上传</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最近捕获 -->
+    <section class="recent-section">
+        <div class="section-header">
+            <h2>最近捕获</h2>
+            <a href="/captures" class="view-all">查看全部 →</a>
+        </div>
+
+        @if (recentCaptures?.Any() == true)
+        {
+            <div class="capture-list">
+                @foreach (var capture in recentCaptures)
+                {
+                    <div class="capture-item">
+                        <div class="capture-thumbnail">
+                            @if (capture.ThumbnailData != null)
+                            {
+                                <img src="data:image/png;base64,@Convert.ToBase64String(capture.ThumbnailData)" alt="缩略图" />
+                            }
+                            else
+                            {
+                                <div class="thumbnail-placeholder">📷</div>
+                            }
+                        </div>
+                        <div class="capture-info">
+                            <div class="capture-title">@capture.WindowTitle</div>
+                            <div class="capture-meta">
+                                <span class="badge @(capture.IsCodeContent ? "code" : "")">@(capture.IsCodeContent ? "代码" : capture.SoftwareType)</span>
+                                <span class="time">@capture.CapturedAt.ToString("MM-dd HH:mm")</span>
+                                @if (capture.IsUploaded)
+                                {
+                                    <span class="badge uploaded">已上传</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="empty-state">
+                <p>暂无捕获记录</p>
+            </div>
+        }
+    </section>
+
+    <!-- 软件使用统计 -->
+    <section class="software-stats">
+        <div class="section-header">
+            <h2>软件使用统计</h2>
+        </div>
+
+        @if (softwareStats?.Any() == true)
+        {
+            <div class="software-list">
+                @foreach (var stat in softwareStats)
+                {
+                    <div class="software-item">
+                        <div class="software-name">@stat.Key</div>
+                        <div class="software-bar">
+                            <div class="bar-fill" style="width: @(GetPercentage(stat.Value))%"></div>
+                        </div>
+                        <div class="software-count">@stat.Value</div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private int todayCaptures;
+    private int totalCaptures;
+    private long totalStorageSize;
+    private int uploadedCount;
+    private List<CaptureRecord>? recentCaptures;
+    private Dictionary<string, int>? softwareStats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            // 加载统计
+            var stats = await StorageService.GetStatisticsAsync();
+            totalCaptures = stats.TotalRecords;
+            totalStorageSize = stats.TotalSize;
+            uploadedCount = stats.UploadedCount;
+            softwareStats = stats.CountBySoftwareType;
+
+            // 今日统计
+            var today = DateTimeOffset.UtcNow.Date;
+            var todayQuery = new CaptureQuery 
+            { 
+                StartTime = today, 
+                EndTime = today.AddDays(1),
+                PageSize = 1 
+            };
+            var todayResult = await StorageService.QueryAsync(todayQuery);
+            todayCaptures = todayResult.TotalCount;
+
+            // 最近记录
+            var recentQuery = new CaptureQuery { PageSize = 5 };
+            var recentResult = await StorageService.QueryAsync(recentQuery);
+            recentCaptures = recentResult.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Dashboard error: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadDataAsync();
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:F1} {sizes[order]}";
+    }
+
+    private double GetPercentage(int count)
+    {
+        if (totalCaptures == 0) return 0;
+        return (count / (double)totalCaptures) * 100;
+    }
+}

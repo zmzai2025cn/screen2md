@@ -1,0 +1,46 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+        <div class="logo">
+            <span class="logo-icon">📸</span>
+            <span class="logo-text">Screen2MD</span>
+        </div>
+        
+        <nav class="nav-menu">
+            <NavLink href="/" class="nav-item" Match="NavLinkMatch.All">
+                <span class="nav-icon">📊</span>
+                <span>概览</span>
+            </NavLink>
+            <NavLink href="/captures" class="nav-item">
+                <span class="nav-icon">📷</span>
+                <span>捕获记录</span>
+            </NavLink>
+            <NavLink href="/analytics" class="nav-item">
+                <span class="nav-icon">📈</span>
+                <span>统计分析</span>
+            </NavLink>
+            <NavLink href="/docs" class="nav-item">
+                <span class="nav-icon">📚</span>
+                <span>文档</span>
+            </NavLink>
+            <NavLink href="/download" class="nav-item">
+                <span class="nav-icon">⬇️</span>
+                <span>下载</span>
+            </NavLink>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <span class="status-dot online"></span>
+                <span class="status-text">运行中</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        @Body
+    </main>
+</div>

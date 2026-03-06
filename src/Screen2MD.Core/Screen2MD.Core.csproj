@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.4" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Screen2MD.Abstractions\Screen2MD.Abstractions.csproj" />
+    <ProjectReference Include="..\Screen2MD.Platform.Common\Screen2MD.Platform.Common.csproj" />
+    <ProjectReference Include="..\Screen2MD.Platform.Mock\Screen2MD.Platform.Mock.csproj" />
+  </ItemGroup>
+
+</Project>

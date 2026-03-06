@@ -1,0 +1,150 @@
+@using Screen2MD.Web.Services
+@inject DownloadService DownloadService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<div class="download-page">
+    <header class="page-header">
+        <h1>下载中心</h1>
+        <p class="subtitle">获取 Screen2MD Enterprise 最新版本</p>
+    </header>
+
+    @if (latestVersion != null)
+    {
+        <!-- 最新版本 -->
+        <section class="latest-version">
+            <div class="version-badge">最新版本</div>
+            
+            <div class="version-card featured">
+                <div class="version-header">
+                    <h2>Screen2MD Enterprise @latestVersion.Version</h2>
+                    <div class="version-meta">
+                        <span class="release-date">发布于 @latestVersion.ReleaseDate.ToString("yyyy年MM月dd日")</span>
+                        <span class="file-size">@FormatBytes(latestVersion.FileSize)</span>
+                    </div>
+                </div>
+
+                <p class="version-description">@latestVersion.Description</p>
+
+                <div class="changelog">
+                    <h4>更新日志</h4>
+                    <ul>
+                        @foreach (var item in latestVersion.Changelog)
+                        {
+                            <li>@item</li>
+                        }
+                    </ul>
+                </div>
+
+                <div class="download-actions">
+                    <button class="btn btn-primary btn-large" @onclick="() => DownloadVersion(latestVersion)">
+                        <span>⬇️ 立即下载</span>
+                    </button>
+                    <a href="/docs/install" class="btn btn-secondary">安装指南</a>
+                </div>
+            </div>
+        </section>
+    }
+
+    <!-- 历史版本 -->
+    <section class="version-history">
+        <h3>历史版本</h3>
+
+        <div class="version-list">
+            @foreach (var version in allVersions.Where(v => !v.IsLatest))
+            {
+                <div class="version-card">
+                    <div class="version-header">
+                        <h4>@version.Version</h4>
+                        <span class="release-date">@version.ReleaseDate.ToString("yyyy-MM-dd")</span>
+                    </div>
+
+                    <p class="version-description">@version.Description</p>
+
+                    <div class="version-footer">
+                        <span class="file-size">@FormatBytes(version.FileSize)</span>
+                        <button class="btn btn-secondary" @onclick="() => DownloadVersion(version)">
+                            下载
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- 系统要求 -->
+    <section class="system-requirements">
+        <h3>系统要求</h3>
+
+        <div class="requirements-grid">
+            <div class="requirement-item">
+                <div class="req-icon">🪟</div>
+                <div class="req-content">
+                    <div class="req-title">Windows 10/11</div>
+                    <div class="req-detail">64位操作系统</div>
+                </div>
+            </div>
+
+            <div class="requirement-item">
+                <div class="req-icon">💾</div>
+                <div class="req-content">
+                    <div class="req-title">2GB 内存</div>
+                    <div class="req-detail">推荐 4GB 或更多</div>
+                </div>
+            </div>
+
+            <div class="requirement-item">
+                <div class="req-icon">💿</div>
+                <div class="req-content">
+                    <div class="req-title">100MB 磁盘空间</div>
+                    <div class="req-detail">用于程序安装</div>
+                </div>
+            </div>
+
+            <div class="requirement-item">
+                <div class="req-icon">🌐</div>
+                <div class="req-content">
+                    <div class="req-title">网络连接</div>
+                    <div class="req-detail">用于数据上传</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+@code {
+    private VersionInfo? latestVersion;
+    private List<VersionInfo>? allVersions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await DownloadService.CreateDummyDownloadsAsync();
+        
+        latestVersion = DownloadService.GetLatestVersion();
+        allVersions = DownloadService.GetAllVersions().ToList();
+    }
+
+    private async Task DownloadVersion(VersionInfo version)
+    {
+        var filePath = DownloadService.GetFilePath(version.Version);
+        if (filePath != null)
+        {
+            var fileName = Path.GetFileName(filePath);
+            var fileUrl = $"/downloads/{fileName}";
+            await JSRuntime.InvokeVoidAsync("window.open", fileUrl, "_blank");
+        }
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:F1} {sizes[order]}";
+    }
+}

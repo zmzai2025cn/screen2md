@@ -1,0 +1,169 @@
+@using Screen2MD.Services.Interfaces
+@inject IStorageService StorageService
+
+<div class="analytics-page">
+    <header class="page-header">
+        <h1>统计分析</h1>
+        <div class="date-range">
+            <select @bind="selectedRange" @bind:after="LoadDataAsync">
+                <option value="7">最近7天</option>
+                <option value="30">最近30天</option>
+                <option value="90">最近90天</option>
+            </select>
+        </div>
+    </header>
+
+    @if (stats != null)
+    {
+        <!-- 概览卡片 -->
+        <div class="stats-overview">
+            <div class="stat-card large">
+                <div class="stat-label">总捕获数</div>
+                <div class="stat-value">@stats.TotalRecords</div>
+                <div class="stat-change">+@todayCount 今日</div>
+            </div>
+
+            <div class="stat-card large">
+                <div class="stat-label">存储占用</div>
+                <div class="stat-value">@FormatBytes(stats.TotalSize)</div>
+            </div>
+
+            <div class="stat-card large">
+                <div class="stat-label">上传完成</div>
+                <div class="stat-value">@stats.UploadedCount</div>
+                <div class="stat-percent">@(GetUploadPercentage())%</div>
+            </div>
+
+            <div class="stat-card large">
+                <div class="stat-label">待上传</div>
+                <div class="stat-value">@stats.PendingCount</div>
+            </div>
+        </div>
+
+        <!-- 软件分布 -->
+        <section class="chart-section">
+            <h2>软件使用分布</h2>
+            
+            <div class="chart-container">
+                @foreach (var item in stats.CountBySoftwareType.OrderByDescending(x => x.Value))
+                {
+                    var percentage = (item.Value / (double)stats.TotalRecords) * 100;
+                    
+                    <div class="chart-bar">
+                        <div class="bar-label">
+                            <span>@item.Key</span>
+                            <span>@item.Value</span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: @(percentage)%"></div>
+                        </div>
+                        <div class="bar-percent">@percentage.ToString("F1")%</div>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <!-- 趋势分析 -->
+        <section class="chart-section">
+            <h2>每日捕获趋势</h2>
+            
+            <div class="trend-chart">
+                @if (dailyStats?.Any() == true)
+                {
+                    var maxValue = dailyStats.Max(x => x.Value);
+                    
+                    <div class="trend-bars">
+                        @foreach (var day in dailyStats)
+                        {
+                            var height = maxValue > 0 ? (day.Value / (double)maxValue) * 100 : 0;
+                            
+                            <div class="trend-bar-item">
+                                <div class="trend-bar" style="height: @(height)%">
+                                    <span class="trend-value">@day.Value</span>
+                                </div>
+                                <div class="trend-label">@day.Key.ToString("MM-dd")</div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p>暂无数据</p>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private StorageStatistics? stats;
+    private int todayCount;
+    private int selectedRange = 7;
+    private Dictionary<DateTime, int>? dailyStats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        // 加载总体统计
+        stats = await StorageService.GetStatisticsAsync();
+
+        // 加载今日统计
+        var today = DateTimeOffset.UtcNow.Date;
+        var todayQuery = new CaptureQuery 
+        { 
+            StartTime = today, 
+            EndTime = today.AddDays(1),
+            PageSize = 1 
+        };
+        var todayResult = await StorageService.QueryAsync(todayQuery);
+        todayCount = todayResult.TotalCount;
+
+        // 加载每日统计
+        await LoadDailyStats();
+    }
+
+    private async Task LoadDailyStats()
+    {
+        dailyStats = new Dictionary<DateTime, int>();
+        var endDate = DateTime.UtcNow.Date;
+        var startDate = endDate.AddDays(-selectedRange);
+
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        {
+            var query = new CaptureQuery
+            {
+                StartTime = date,
+                EndTime = date.AddDays(1),
+                PageSize = 1
+            };
+            var result = await StorageService.QueryAsync(query);
+            dailyStats[date] = result.TotalCount;
+        }
+    }
+
+    private double GetUploadPercentage()
+    {
+        if (stats?.TotalRecords > 0)
+        {
+            return (stats.UploadedCount / (double)stats.TotalRecords) * 100;
+        }
+        return 0;
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:F1} {sizes[order]}";
+    }
+}

@@ -1,0 +1,389 @@
+# Screen2MD Enterprise - CI/CD Pipeline
+# 完整持续集成/持续部署流程
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  SOLUTION_FILE: 'Screen2MD-v3.sln'
+
+jobs:
+  # ==========================================
+  # Stage 1: 代码质量检查
+  # ==========================================
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore Packages
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Check Formatting
+        run: dotnet format --verify-no-changes --verbosity diagnostic
+
+      - name: Build (Treat Warnings as Errors)
+        run: dotnet build ${{ env.SOLUTION_FILE }} --no-restore --configuration Release -p:TreatWarningsAsErrors=true
+
+  # ==========================================
+  # Stage 2: 单元测试 (快速反馈)
+  # ==========================================
+  unit-tests:
+    name: Unit Tests
+    needs: code-quality
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Run Unit Tests
+        run: |
+          dotnet test ${{ env.SOLUTION_FILE }} \
+            --no-restore \
+            --configuration Release \
+            --filter "Category=Unit" \
+            --logger trx \
+            --results-directory ./test-results
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: ./test-results/*.trx
+
+      - name: Publish Test Results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Unit Tests ${{ matrix.os }}
+          path: ./test-results/*.trx
+          reporter: dotnet-trx
+          fail-on-error: true
+
+  # ==========================================
+  # Stage 3: 集成测试
+  # ==========================================
+  integration-tests:
+    name: Integration Tests
+    needs: unit-tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Run Integration Tests
+        run: |
+          dotnet test ${{ env.SOLUTION_FILE }} \
+            --no-restore \
+            --configuration Release \
+            --filter "Category=Integration" \
+            --logger trx \
+            --results-directory ./test-results
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-results-${{ matrix.os }}
+          path: ./test-results/*.trx
+
+  # ==========================================
+  # Stage 4: 压力测试 (仅Linux, 长时间运行)
+  # ==========================================
+  stress-tests:
+    name: Stress Tests
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Run Concurrency Stress Tests
+        run: |
+          dotnet test ${{ env.SOLUTION_FILE }} \
+            --no-restore \
+            --configuration Release \
+            --filter "Category=Stress" \
+            --logger trx \
+            --results-directory ./test-results
+
+      - name: Run Memory Leak Tests
+        run: |
+          dotnet test ${{ env.SOLUTION_FILE }} \
+            --no-restore \
+            --configuration Release \
+            --filter "Category=Memory" \
+            --logger trx \
+            --results-directory ./test-results
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stress-test-results
+          path: ./test-results/*.trx
+
+  # ==========================================
+  # Stage 5: 安全扫描
+  # ==========================================
+  security-scan:
+    name: Security Scan
+    needs: code-quality
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Security Tests
+        run: |
+          dotnet test ${{ env.SOLUTION_FILE }} \
+            --configuration Release \
+            --filter "Category=Security" \
+            --logger trx
+
+      - name: CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: Dependency Vulnerability Scan
+        run: dotnet list package --vulnerable --include-transitive
+        continue-on-error: true
+
+  # ==========================================
+  # Stage 6: 性能基准测试
+  # ==========================================
+  performance-tests:
+    name: Performance Benchmarks
+    needs: unit-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Run Performance Tests
+        run: |
+          dotnet test ${{ env.SOLUTION_FILE }} \
+            --configuration Release \
+            --filter "Category=Performance" \
+            --logger trx \
+            --results-directory ./perf-results
+
+      - name: Upload Performance Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: ./perf-results/*.trx
+
+  # ==========================================
+  # Stage 7: 构建发布包
+  # ==========================================
+  build-release:
+    name: Build Release
+    needs: [unit-tests, integration-tests, security-scan]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            runtime: linux-x64
+            artifact_name: screen2md-linux-x64
+          - os: windows-latest
+            runtime: win-x64
+            artifact_name: screen2md-win-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish
+        run: |
+          dotnet publish src/Screen2MD/Screen2MD.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.runtime }} \
+            --self-contained true \
+            --single-file true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish/${{ matrix.artifact_name }}
+
+      - name: Create Archive (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd ./publish
+          tar -czf ${{ matrix.artifact_name }}.tar.gz ${{ matrix.artifact_name }}
+
+      - name: Create Archive (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd ./publish
+          Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ${{ matrix.artifact_name }}.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./publish/${{ matrix.artifact_name }}.*
+
+  # ==========================================
+  # Stage 8: 创建发布 (仅Tags)
+  # ==========================================
+  create-release:
+    name: Create Release
+    needs: [build-release, stress-tests, performance-tests]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./artifacts/**/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to CDN (Production)
+        if: ${{ !contains(github.ref, '-rc') && !contains(github.ref, '-beta') }}
+        run: |
+          echo "Uploading to production CDN..."
+          # 这里添加你的CDN上传脚本
+          # scp ./artifacts/* user@cdn-server:/var/www/downloads/
+        env:
+          CDN_SSH_KEY: ${{ secrets.CDN_SSH_KEY }}
+
+  # ==========================================
+  # Stage 9: 代码覆盖率报告
+  # ==========================================
+  coverage:
+    name: Code Coverage
+    needs: unit-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install Coverage Tools
+        run: dotnet tool install --global dotnet-coverage
+
+      - name: Run Tests with Coverage
+        run: |
+          dotnet-coverage collect \
+            "dotnet test ${{ env.SOLUTION_FILE }} --configuration Release --filter Category=Unit" \
+            -f xml \
+            -o coverage.xml
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Generate Coverage Report
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:coverage.xml \
+            -targetdir:coveragereport \
+            -reporttypes:Html
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coveragereport/

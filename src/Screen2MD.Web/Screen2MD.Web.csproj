@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Screen2MD.Kernel\Screen2MD.Kernel.csproj" />
+    <ProjectReference Include="..\Screen2MD.Engines\Screen2MD.Engines.csproj" />
+    <ProjectReference Include="..\Screen2MD.Services\Screen2MD.Services.csproj" />
+    <ProjectReference Include="..\Screen2MD.UI\Screen2MD.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.3" />
+    <PackageReference Include="MudBlazor" Version="9.1.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

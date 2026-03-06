@@ -1,0 +1,164 @@
+@using Screen2MD.Services.Interfaces
+@inject IStorageService StorageService
+
+<div class="captures-page">
+    <header class="page-header">
+        <h1>捕获记录</h1>
+        
+        <div class="filter-bar">
+            <select @bind="selectedSoftwareType" class="filter-select">
+                <option value="">全部类型</option>
+                <option value="IDE">IDE</option>
+                <option value="Browser">浏览器</option>
+                <option value="IM">即时通讯</option>
+                <option value="Document">文档</option>
+            </select>
+
+            <select @bind="selectedStatus" class="filter-select">
+                <option value="">全部状态</option>
+                <option value="uploaded">已上传</option>
+                <option value="pending">待上传</option>
+            </select>
+
+            <button class="btn btn-primary" @onclick="ApplyFilters">筛选</button>
+            <button class="btn btn-secondary" @onclick="RefreshData">🔄 刷新</button>
+        </div>
+    </header>
+
+    <div class="captures-content">
+        @if (queryResult?.Items?.Any() == true)
+        {
+            <div class="capture-grid">
+                @foreach (var capture in queryResult.Items)
+                {
+                    <div class="capture-card">
+                        <div class="capture-image">
+                            @if (capture.ThumbnailData != null)
+                            {
+                                <img src="data:image/png;base64,@Convert.ToBase64String(capture.ThumbnailData)" alt="截图" />
+                            }
+                            else
+                            {
+                                <div class="image-placeholder">📷</div>
+                            }
+                        </div>
+                        
+                        <div class="capture-details">
+                            <div class="capture-header">
+                                <span class="badge @(capture.IsCodeContent ? "code" : "")">@(capture.IsCodeContent ? "代码" : capture.SoftwareType)</span>
+                                <span class="time">@capture.CapturedAt.ToString("MM-dd HH:mm:ss")</span>
+                            </div>
+                            
+                            <div class="capture-title">@capture.WindowTitle</div>
+                            <div class="capture-process">@capture.ProcessName</div>
+                            
+                            @if (!string.IsNullOrEmpty(capture.TextContent))
+                            {
+                                <div class="capture-preview">@capture.TextContent.Substring(0, Math.Min(100, capture.TextContent.Length))...</div>
+                            }
+                            
+                            <div class="capture-footer">
+                                <span class="file-size">@FormatBytes(capture.FileSize)</span>
+                                <span class="status @(capture.IsUploaded ? "uploaded" : "pending")">@(capture.IsUploaded ? "已上传" : "待上传")</span>
+                                <button class="btn-icon" title="删除" @onclick="() => DeleteCapture(capture.Id)">🗑️</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- 分页 -->
+            @if (queryResult.TotalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn-page" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)">上一页</button>
+                    
+                    <span class="page-info">第 @currentPage / @queryResult.TotalPages 页 (共 @queryResult.TotalCount 条)</span>
+                    
+                    <button class="btn-page" disabled="@(currentPage >= queryResult.TotalPages)" @onclick="() => GoToPage(currentPage + 1)">下一页</button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📷</div>
+                <p>暂无捕获记录</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private QueryResult<CaptureRecord>? queryResult;
+    private int currentPage = 1;
+    private int pageSize = 12;
+    private string selectedSoftwareType = "";
+    private string selectedStatus = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        var query = new CaptureQuery
+        {
+            PageNumber = currentPage,
+            PageSize = pageSize
+        };
+
+        if (!string.IsNullOrEmpty(selectedSoftwareType))
+        {
+            query = query with { SoftwareType = selectedSoftwareType };
+        }
+
+        if (selectedStatus == "uploaded")
+        {
+            query = query with { IsUploaded = true };
+        }
+        else if (selectedStatus == "pending")
+        {
+            query = query with { IsUploaded = false };
+        }
+
+        queryResult = await StorageService.QueryAsync(query);
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadDataAsync();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        currentPage = page;
+        await LoadDataAsync();
+    }
+
+    private async Task DeleteCapture(string id)
+    {
+        await StorageService.DeleteAsync(id);
+        await LoadDataAsync();
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:F1} {sizes[order]}";
+    }
+}

@@ -1,0 +1,154 @@
+name: Screen2MD Kernel CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/Screen2MD.Kernel/**'
+      - 'src/Screen2MD.Kernel.Tests/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/Screen2MD.Kernel/**'
+      - 'src/Screen2MD.Kernel.Tests/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0'
+    
+    - name: Restore dependencies
+      run: dotnet restore src/Screen2MD.Kernel.Tests
+    
+    - name: Build
+      run: dotnet build src/Screen2MD.Kernel.Tests --configuration Release --no-restore
+    
+    - name: Run Unit Tests
+      run: |
+        dotnet test src/Screen2MD.Kernel.Tests \
+          --filter "Category=Unit" \
+          --no-build \
+          --verbosity normal \
+          --logger trx \
+          --collect:"XPlat Code Coverage"
+    
+    - name: Run ZeroBug Tests
+      run: |
+        dotnet test src/Screen2MD.Kernel.Tests \
+          --filter "Category=ZeroBug" \
+          --no-build \
+          --verbosity normal \
+          --logger trx
+    
+    - name: Run Integration Tests
+      run: |
+        dotnet test src/Screen2MD.Kernel.Tests \
+          --filter "Category=Integration" \
+          --no-build \
+          --verbosity normal \
+          --logger trx
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0'
+    
+    - name: Restore dependencies
+      run: dotnet restore src/Screen2MD.Kernel.Tests
+    
+    - name: Build
+      run: dotnet build src/Screen2MD.Kernel.Tests --configuration Release --no-restore
+    
+    - name: Test with Coverage
+      run: |
+        dotnet test src/Screen2MD.Kernel.Tests \
+          --no-build \
+          --verbosity normal \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./coverage
+    
+    - name: Generate Coverage Report
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.2.0
+      with:
+        reports: './coverage/**/coverage.cobertura.xml'
+        targetdir: './coveragereport'
+        reporttypes: 'HtmlInline;Cobertura'
+    
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: ./coveragereport
+    
+    - name: Code Coverage Summary
+      run: |
+        echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
+        cat ./coveragereport/Summary.txt >> $GITHUB_STEP_SUMMARY || echo "Coverage report generated"
+
+  long-running-tests:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 30
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0'
+    
+    - name: Restore dependencies
+      run: dotnet restore src/Screen2MD.Kernel.Tests
+    
+    - name: Build
+      run: dotnet build src/Screen2MD.Kernel.Tests --configuration Release --no-restore
+    
+    - name: Run 5-Minute Stability Test
+      run: |
+        dotnet test src/Screen2MD.Kernel.Tests \
+          --filter "FullyQualifiedName~Kernel_Should_RunStable_For5Minutes" \
+          --no-build \
+          --verbosity normal \
+          --logger "console;verbosity=detailed"
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0'
+    
+    - name: Restore dependencies
+      run: dotnet restore src/Screen2MD.Kernel
+    
+    - name: Build with Analysis
+      run: |
+        dotnet build src/Screen2MD.Kernel \
+          --configuration Release \
+          --verbosity normal \
+          -p:TreatWarningsAsErrors=true \
+          -p:AnalysisLevel=latest \
+          -p:AnalysisMode=All
+    
+    - name: Run Code Analysis
+      run: |
+        dotnet format src/Screen2MD.Kernel --verify-no-changes --verbosity diagnostic || true
