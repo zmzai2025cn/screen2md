@@ -1,5 +1,0 @@
-<?xml version="1.0"?>
-<TestSequence>
-  <Test Name="Screen2MD.Core.Tests.CaptureServiceTests.CaptureAsync_ShouldReturnResult" DisplayName="Screen2MD.Core.Tests.CaptureServiceTests.CaptureAsync_ShouldReturnResult" Source="/root/.openclaw/workspace/screen2md-enterprise/tests/Screen2MD.Core.Tests/bin/Debug/net8.0/Screen2MD.Core.Tests.dll" Completed="False" />
-  <Test Name="Screen2MD.Core.Tests.OcrServiceTests.RecognizeAsync_ShouldReturnResult" DisplayName="Screen2MD.Core.Tests.OcrServiceTests.RecognizeAsync_ShouldReturnResult" Source="/root/.openclaw/workspace/screen2md-enterprise/tests/Screen2MD.Core.Tests/bin/Debug/net8.0/Screen2MD.Core.Tests.dll" Completed="False" />
-</TestSequence>
